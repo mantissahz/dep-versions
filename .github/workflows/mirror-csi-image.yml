@@ -1,0 +1,87 @@
+name: "Mirror CSI Images"
+
+on:
+  push:
+    branches:
+      - master
+      - "v*"
+    paths:
+      - versions.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-csi-images
+  cancel-in-progress: false
+
+jobs:
+  trigger-jenkins:
+    name: "Trigger Jenkins mirror-csi-images pipeline"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dep-versions
+        uses: actions/checkout@v4
+
+      - name: Generate CSI_IMAGES from versions.json
+        id: csi-images
+        run: |
+          set -euo pipefail
+
+          components=(
+            "csi-attacher"
+            "csi-provisioner"
+            "csi-resizer"
+            "csi-snapshotter"
+            "csi-node-driver-registrar"
+            "livenessprobe"
+          )
+
+          CSI_IMAGES=""
+
+          for component in "${components[@]}"; do
+            tag="$(jq -r --arg component "${component}" '.[$component].tag' versions.json)"
+
+            image="${component}:${tag}"
+
+            if [[ -z "${CSI_IMAGES}" ]]; then
+              CSI_IMAGES="${image}"
+            else
+              CSI_IMAGES="${CSI_IMAGES},${image}"
+            fi
+          done
+
+          echo "CSI_IMAGES=${CSI_IMAGES}"
+          echo "csi_images=${CSI_IMAGES}" >> "${GITHUB_OUTPUT}"
+
+      - name: Trigger Jenkins mirror-csi-images job
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+          CSI_IMAGES: ${{ steps.csi-images.outputs.csi_images }}
+        run: |
+          set -euo pipefail
+
+          JENKINS_URL="${JENKINS_URL%/}"
+          JOB_URL="${JENKINS_URL}/job/private/job/mirror-csi-images/buildWithParameters"
+
+          echo "Triggering Jenkins job: ${JOB_URL}"
+          echo "CSI_IMAGES=${CSI_IMAGES}"
+
+          curl_args=(
+            -fsS
+            -X POST
+            --user "${JENKINS_USER}:${JENKINS_API_TOKEN}"
+          )
+
+          curl "${curl_args[@]}" "${JOB_URL}" \
+            --data-urlencode "SEND_SLACK_NOTIFICATION=false" \
+            --data-urlencode "NOTIFY_SLACK_CHANNEL=" \
+            --data-urlencode "LONGHORN_IMAGES_FILE_URL=" \
+            --data-urlencode "CSI_IMAGES=${CSI_IMAGES}" \
+            --data-urlencode "TF_VAR_tf_workspace=/src/longhorn-tests/mirror_csi_images"
+
+          echo "Jenkins job triggered successfully"
