@@ -18,8 +18,8 @@
     "description": "SPDK is a storage performance development kit."
   },
   "go-spdk-helper": {
-    "repo": "https://github.com/longhorn/go-spdk-helper.git",
-    "commit": "6102449746a0f44f97d9bc538f00870b9b88faf7",
+    "repo": "https://github.com/mantissahz/go-spdk-helper.git",
+    "commit": "fbc2534360af5f44326224f7a787c9e068c61d1a",
     "tag": "v0.11.0",
     "description": "go-spdk-helper is a Go wrapper for SPDK."
   },
